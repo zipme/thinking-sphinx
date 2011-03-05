@@ -2,6 +2,7 @@ require 'active_record'
 require 'yaml'
 require 'riddle'
 
+require 'thread'
 require 'thinking_sphinx/auto_version'
 require 'thinking_sphinx/core/array'
 require 'thinking_sphinx/core/string'
