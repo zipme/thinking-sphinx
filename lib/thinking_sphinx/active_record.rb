@@ -25,10 +25,13 @@ module ThinkingSphinx
           end
           
           def primary_key_for_sphinx
-            if custom_primary_key_for_sphinx?
-              @sphinx_primary_key_attribute || superclass.primary_key_for_sphinx
-            else
-              primary_key
+            @primary_key_for_sphinx ||= begin
+              if custom_primary_key_for_sphinx?
+                @sphinx_primary_key_attribute ||
+                superclass.primary_key_for_sphinx
+              else
+                primary_key
+              end
             end
           end
           
@@ -37,6 +40,10 @@ module ThinkingSphinx
               superclass.respond_to?(:custom_primary_key_for_sphinx?) &&
               superclass.custom_primary_key_for_sphinx?
             ) || !@sphinx_primary_key_attribute.nil?
+          end
+          
+          def clear_primary_key_for_sphinx
+            @primary_key_for_sphinx = nil
           end
           
           def sphinx_index_options
@@ -263,33 +270,6 @@ module ThinkingSphinx
       def sphinx_offset
         ThinkingSphinx.context.superclass_indexed_models.
           index eldest_indexed_ancestor
-      end
-      
-      # Temporarily disable delta indexing inside a block, then perform a single
-      # rebuild of index at the end.
-      #
-      # Useful when performing updates to batches of models to prevent
-      # the delta index being rebuilt after each individual update.
-      #
-      # In the following example, the delta index will only be rebuilt once,
-      # not 10 times.
-      #
-      #   SomeModel.suspended_delta do
-      #     10.times do
-      #       SomeModel.create( ... )
-      #     end
-      #   end
-      #
-      def suspended_delta(reindex_after = true, &block)
-        define_indexes
-        original_setting = ThinkingSphinx.deltas_enabled?
-        ThinkingSphinx.deltas_enabled = false
-        begin
-          yield
-        ensure
-          ThinkingSphinx.deltas_enabled = original_setting
-          self.index_delta if reindex_after
-        end
       end
       
       private
