@@ -102,8 +102,8 @@ module ThinkingSphinx
     end
   end
 
-  def self.unique_id_expression(offset = nil)
-    "* #{context.indexed_models.size} + #{offset || 0}"
+  def self.unique_id_expression(adapter, offset = nil)
+    "* #{adapter.cast_to_int context.indexed_models.size} + #{offset || 0}"
   end
 
   # Check if index definition is disabled.
@@ -125,6 +125,16 @@ module ThinkingSphinx
   # Check if delta indexing is enabled/disabled.
   #
   def self.deltas_enabled?
+    if @@deltas_enabled.nil?
+      mutex.synchronize do
+        if @@deltas_enabled.nil?
+          @@deltas_enabled = (
+            ThinkingSphinx::Configuration.environment != "test"
+          )
+        end
+      end
+    end
+    
     @@deltas_enabled && !deltas_suspended?
   end
   
@@ -282,6 +292,7 @@ module ThinkingSphinx
 
   def self.mysql?
     ::ActiveRecord::Base.connection.class.name.demodulize == "MysqlAdapter" ||
+    ::ActiveRecord::Base.connection.class.name.demodulize == "Mysql2Adapter" ||
     ::ActiveRecord::Base.connection.class.name.demodulize == "MysqlplusAdapter" || (
       jruby? && ::ActiveRecord::Base.connection.config[:adapter] == "jdbcmysql"
     )
@@ -289,5 +300,3 @@ module ThinkingSphinx
   
   extend ThinkingSphinx::SearchMethods::ClassMethods
 end
-
-ThinkingSphinx::AutoVersion.detect

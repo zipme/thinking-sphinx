@@ -11,8 +11,8 @@ module ThinkingSphinx
     CoreMethods = %w( == class class_eval extend frozen? id instance_eval
       instance_of? instance_values instance_variable_defined?
       instance_variable_get instance_variable_set instance_variables is_a?
-      kind_of? member? method methods nil? object_id respond_to? send should
-      type )
+      kind_of? member? method methods nil? object_id respond_to?
+      respond_to_missing? send should type )
     SafeMethods = %w( partition private_methods protected_methods
       public_methods send class )
     
@@ -22,7 +22,7 @@ module ThinkingSphinx
       undef_method method
     }
     
-    HashOptions   = [:conditions, :with, :without, :with_all]
+    HashOptions   = [:conditions, :with, :without, :with_all, :without_any]
     ArrayOptions  = [:classes, :without_ids]
     
     attr_reader :args, :options
@@ -202,6 +202,10 @@ module ThinkingSphinx
       @options[:page].blank? ? 1 : @options[:page].to_i
     end
     
+    def first_page?
+      current_page == 1
+    end
+    
     # Kaminari support
     def page(page_number)
       @options[:page] = page_number
@@ -215,6 +219,10 @@ module ThinkingSphinx
     # 
     def next_page
       current_page >= total_pages ? nil : current_page + 1
+    end
+    
+    def next_page?
+      !next_page.nil?
     end
     
     # The previous page number of the result set. If this is the first page,
@@ -482,9 +490,12 @@ module ThinkingSphinx
     
     def match_hash(object)
       @results[:matches].detect { |match|
+        class_crc = object.class.name
+        class_crc = object.class.to_crc32 if Riddle.loaded_version.to_i < 2
+        
         match[:attributes]['sphinx_internal_id'] == object.
           primary_key_for_sphinx &&
-        match[:attributes]['class_crc'] == object.class.to_crc32
+        match[:attributes][crc_attribute] == class_crc
       }
     end
 
@@ -722,6 +733,11 @@ module ThinkingSphinx
         Array(values).collect { |value|
           Riddle::Client::Filter.new attrib.to_s, filter_value(value)
         }
+      }.flatten +
+      (options[:without_any] || {}).collect { |attrib, values|
+        Array(values).collect { |value|
+          Riddle::Client::Filter.new attrib.to_s, filter_value(value), true
+        }
       }.flatten
     end
     
@@ -877,7 +893,7 @@ module ThinkingSphinx
       return single_class_results if one_class
       
       groups = results[:matches].group_by { |match|
-        match[:attributes]["class_crc"]
+        match[:attributes][crc_attribute]
       }
       groups.each do |crc, group|
         group.replace(
@@ -887,7 +903,7 @@ module ThinkingSphinx
       
       results[:matches].collect do |match|
         groups.detect { |crc, group|
-          crc == match[:attributes]["class_crc"]
+          crc == match[:attributes][crc_attribute]
         }[1].compact.detect { |obj|
           obj.primary_key_for_sphinx == match[:attributes]["sphinx_internal_id"]
         }
@@ -899,7 +915,11 @@ module ThinkingSphinx
     end
     
     def class_from_crc(crc)
-      config.models_by_crc[crc].constantize
+      if Riddle.loaded_version.to_i < 2
+        config.models_by_crc[crc].constantize
+      else
+        crc.constantize
+      end
     end
     
     def each_with_attribute(attribute, &block)
@@ -951,6 +971,10 @@ module ThinkingSphinx
       @populated = false
       
       results_count
+    end
+    
+    def crc_attribute
+      Riddle.loaded_version.to_i < 2 ? 'class_crc' : 'sphinx_internal_class'
     end
   end
 end

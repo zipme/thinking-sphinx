@@ -10,11 +10,13 @@ require 'bundler'
 Bundler.require :default, :development
 
 require 'active_support/core_ext/module/attribute_accessors'
+require 'active_support/core_ext/class/inheritable_attributes'
 require "#{File.dirname(__FILE__)}/../lib/thinking_sphinx"
 require "#{File.dirname(__FILE__)}/sphinx_helper"
 
 Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].each {|f| require f}
 
+ThinkingSphinx::Configuration.instance
 ThinkingSphinx::ActiveRecord::LogSubscriber.logger = Logger.new(StringIO.new)
 
 RSpec.configure do |config|
@@ -53,8 +55,9 @@ def minimal_result_hashes(*instances)
     {
       :weight     => 21,
       :attributes => {
-        'sphinx_internal_id' => instance.id,
-        'class_crc'          => instance.class.name.to_crc32
+        'sphinx_internal_id'    => instance.id,
+        'sphinx_internal_class' => instance.class.name,
+        'class_crc'             => instance.class.name.to_crc32
       }
     }
   end

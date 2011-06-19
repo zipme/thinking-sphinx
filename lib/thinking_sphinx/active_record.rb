@@ -13,7 +13,11 @@ module ThinkingSphinx
   module ActiveRecord
     def self.included(base)
       base.class_eval do
-        class_inheritable_array :sphinx_indexes, :sphinx_facets
+        if defined?(class_attribute)
+          class_attribute :sphinx_indexes, :sphinx_facets
+        else
+          class_inheritable_array :sphinx_indexes, :sphinx_facets
+        end
         
         extend ThinkingSphinx::ActiveRecord::ClassMethods
         
@@ -202,7 +206,6 @@ module ThinkingSphinx
       
       def insert_sphinx_index(index)
         self.sphinx_indexes << index
-        descendants.each { |klass| klass.insert_sphinx_index(index) }
       end
       
       def has_sphinx_indexes?
@@ -263,13 +266,41 @@ module ThinkingSphinx
         ThinkingSphinx::Configuration.instance.client.update(
           index, ['sphinx_deleted'], {document_id => [1]}
         )
-      rescue Riddle::ConnectionError, ThinkingSphinx::SphinxError
+      rescue Riddle::ConnectionError, ThinkingSphinx::SphinxError,
+        Errno::ETIMEDOUT
         # Not the end of the world if Sphinx isn't running.
       end
       
       def sphinx_offset
         ThinkingSphinx.context.superclass_indexed_models.
           index eldest_indexed_ancestor
+      end
+      
+      # Temporarily disable delta indexing inside a block, then perform a
+      # single rebuild of index at the end.
+      #
+      # Useful when performing updates to batches of models to prevent
+      # the delta index being rebuilt after each individual update.
+      #
+      # In the following example, the delta index will only be rebuilt
+      # once, not 10 times.
+      #
+      #   SomeModel.suspended_delta do
+      #     10.times do
+      #       SomeModel.create( ... )
+      #     end
+      #   end
+      #
+      def suspended_delta(reindex_after = true, &block)
+        define_indexes
+        original_setting = ThinkingSphinx.deltas_suspended?
+        ThinkingSphinx.deltas_suspended = true
+        begin
+          yield
+        ensure
+          ThinkingSphinx.deltas_suspended = original_setting
+          self.index_delta if reindex_after
+        end
       end
       
       private

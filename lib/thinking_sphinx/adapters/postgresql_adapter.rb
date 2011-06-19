@@ -28,11 +28,19 @@ module ThinkingSphinx
     end
     
     def cast_to_datetime(clause)
-      "cast(extract(epoch from #{clause}) as int)"
+      if ThinkingSphinx::Configuration.instance.use_64_bit
+        "cast(extract(epoch from #{clause}) as bigint)"
+      else
+        "cast(extract(epoch from #{clause}) as int)"
+      end
     end
     
     def cast_to_unsigned(clause)
       clause
+    end
+    
+    def cast_to_int(clause)
+      "#{clause}::INT8"
     end
     
     def convert_nulls(clause, default = '')
